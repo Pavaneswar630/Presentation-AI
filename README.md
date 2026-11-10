@@ -6,9 +6,9 @@
 [![FAISS](https://img.shields.io/badge/FAISS-HNSW_M=16-blue.svg?style=flat)](https://github.com/facebookresearch/faiss)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.2+-EE4C2C.svg?style=flat&logo=pytorch)](https://pytorch.org)
 [![Latency SLA](https://img.shields.io/badge/Processing_Latency-<22ms_SLA-brightgreen.svg?style=flat)](#latency-budget)
-[![Tests](https://img.shields.io/badge/Tests-16%2F16_Passed-brightgreen.svg?style=flat)](#automated-test-results)
+[![Tests](https://img.shields.io/badge/Tests-22%2F22_Passed-brightgreen.svg?style=flat)](#automated-test-results)
 
-**Presentation AI** is an enterprise-grade, asynchronous AI coaching system that delivers real-time body language and vocal delivery feedback during live presentations. It integrates a low-latency dual-threaded computer vision pipeline, an offline FAISS HNSW vector database over 1,000 coaching transcripts, a PyTorch/NumPy post-session analytics engine, a high-throughput FastAPI/WebSocket server, and a sleek cyber-dark web dashboard.
+**Presentation AI** is an enterprise-grade, asynchronous AI coaching system that delivers real-time body language and vocal delivery feedback during live presentations. It integrates a low-latency dual-threaded computer vision pipeline, an offline FAISS HNSW vector database over 1,000 coaching transcripts, a PyTorch/NumPy post-session analytics engine, interactive audience Q&A and live probing, a FastAPI/WebSocket server, and a cyber-dark web dashboard.
 
 ---
 
@@ -19,9 +19,11 @@
    - [Module 2: Offline FAISS HNSW RAG Pipeline](#module-2-offline-faiss-hnsw-rag-pipeline-rag_engine)
    - [Module 3: Post-Session PyTorch Analytics Engine](#module-3-post-session-pytorch-analytics-engine-analytics)
    - [Module 4: FastAPI & WebSocket Server](#module-4-fastapi--websocket-server-api)
+   - [Module 5: Interactive Q&A and Live Probes](#module-5-interactive-qa-and-live-probes)
 3. [Interactive Web UI Dashboard](#interactive-web-ui-dashboard)
    - [Live Coaching HUD Mode](#live-coaching-hud-mode)
    - [Post-Session Diagnostic Report Mode](#post-session-diagnostic-report-mode)
+   - [Audience Q&A Simulator](#audience-qa-simulator)
 4. [Charts & Visual Graphs](#charts--visual-graphs)
 5. [Automated Test Results & Benchmarks](#automated-test-results--benchmarks)
 6. [API & WebSocket Protocol Specification](#api--websocket-protocol-specification)
@@ -39,12 +41,14 @@ graph TD
         Mic["Microphone (Web Speech STT)"]
         LiveHUD["Live Coaching HUD Overlay"]
         ReportView["Post-Session Report & Radar Charts"]
+        QASimulator["Audience Q&A Simulator"]
     end
 
     subgraph API ["FastAPI Gateway (api/)"]
         WSRouter["WebSocket Stream (/ws/v1/session/{id})"]
         REST["REST API (/api/v1/sessions)"]
         SessionMgr["SessionManager & State Store"]
+        QAGenerator["Question Generator"]
     end
 
     subgraph VisionPipeline ["Video Pipeline (video_pipeline/)"]
@@ -66,6 +70,7 @@ graph TD
         BGE["BGE-large-en Embedder (1024-d)"]
         HNSW["FAISS IndexHNSWFlat (M=16, ef=64)"]
         Retriever["CoachingRetriever (Defect Queries)"]
+        QuestionRAG["Question Context Retrieval"]
     end
 
     Webcam -->|Base64 JPEG @ 30 FPS| WSRouter
@@ -84,10 +89,18 @@ graph TD
     PyTorchPosture --> ReportAggregator
     SpeechCadence --> ReportAggregator
     Corpus --> Chunker --> BGE --> HNSW --> Retriever
+    HNSW --> QuestionRAG
     ReportAggregator -->|Defect Query| Retriever
     Retriever -->|Top-3 Coaching Advice| ReportAggregator
     ReportAggregator -->|PostSessionReport JSON| REST
     REST --> ReportView
+    WSRouter -->|Recent speech tokens| SessionMgr
+    SessionMgr --> QAGenerator
+    QAGenerator --> QuestionRAG
+    QAGenerator -->|Targeted questions| REST
+    REST --> QASimulator
+    QAGenerator -->|Live probe| WSRouter
+    WSRouter --> QASimulator
 ```
 
 ---
@@ -195,11 +208,22 @@ $$S_{posture} = 100 \cdot \exp\left( - \left[ \alpha \sigma^2_\theta + \beta \si
   * `POST /api/v1/sessions/start`: Allocates session buffer and pipeline instance.
   * `POST /api/v1/sessions/{session_id}/stop`: Gracefully halts workers and compiles report.
   * `GET /api/v1/sessions/{session_id}/report`: Returns full structured evaluation JSON.
+  * `POST /api/v1/sessions/{session_id}/generate-questions`: Generates transcript-aware evaluator questions and answer guidance.
   * `GET /api/v1/health`: System health and component status.
 * **Full-Duplex WebSocket Endpoint (`/ws/v1/session/{session_id}`):**
   * Handshake `connection_ack` negotiation.
   * Ingests Base64 JPEG frames and audio tokens.
+  * Accepts `request_live_probes` and broadcasts a `live_probe_question` based on recent speech.
   * Broadcasts `live_metrics` (<22ms SLA check, FPS, angles, WPM) and animated `coaching_alert` notifications.
+
+### Module 5: Interactive Q&A and Live Probes
+
+The question generator analyzes transcript text or timestamped speech tokens to identify key topics, claims, and quantifiable metrics. It searches the FAISS HNSW index for relevant coaching context, then generates targeted evaluator questions with a rationale and suggested answer strategy.
+
+* **Targeted questions:** Request 1–10 questions (3 by default) at foundational, probing, or challenging difficulty. Categories include Critical Thinking, Clarification, Feasibility, and Business Impact.
+* **Live probes:** A WebSocket request generates an immediate prompt based on speech from the last 30 seconds, such as asking for the baseline behind a cited metric.
+* **Provider options:** Set `GEMINI_API_KEY` or `OPENAI_API_KEY` to use an LLM. `PRES_AI_LLM_PROVIDER`, `PRES_AI_LLM_MODEL`, and `PRES_AI_LLM_BASE_URL` optionally configure the provider, model, and OpenAI-compatible endpoint. With no key, generation uses the built-in offline heuristic and does not require network access.
+* **Resilience:** External requests are asynchronous and retried for transient failures; unavailable or unsuccessful providers fall back to offline generation.
 
 ---
 
@@ -260,6 +284,10 @@ The built-in web dashboard is served directly by the backend at `http://localhos
 +---------------------------------------------------------------------------------------------------+
 ```
 
+### Audience Q&A Simulator
+
+After a session, use **Generate Audience Questions** in the report to create three practice questions from the session transcript by default. Each card displays the question category, why an evaluator might ask it, and a recommended answer strategy. Live practice is also available in the HUD with **Ask me a live question**; the question is based on speech from the last 30 seconds and appears in the live-probe panel. The REST endpoint also accepts `question_count`, `difficulty`, and `focus_area`.
+
 ---
 
 ## Charts & Visual Graphs
@@ -304,7 +332,7 @@ Layer 0 (Base Graph):    (Doc 012) <-> (Doc 095) <-> (Doc 412) <-> (Doc 841)
 
 ## Automated Test Results & Benchmarks
 
-The entire test suite covering all four modules was executed via `pytest`. All 16 tests passed:
+The full test suite covers the video pipeline, RAG engine, analytics, APIs, and interactive question generation. All 22 tests passed:
 
 ```bash
 python -m pytest tests -v
@@ -330,9 +358,15 @@ python -m pytest tests -v
 | 14 | `tests/test_api.py` | `test_ui_index_served` | Verifies `GET /` serves HTML5 coaching UI | 0.03s | **PASSED** |
 | 15 | `tests/test_api.py` | `test_session_lifecycle_rest_api` | Tests `start -> status -> stop -> report` lifecycle | 0.35s | **PASSED** |
 | 16 | `tests/test_api.py` | `test_websocket_handshake_and_streaming` | Verifies WS handshake ACK, heartbeat, and frame streaming | 0.22s | **PASSED** |
+| 17 | `tests/test_question_generator.py` | `test_transcript_segment_analyzer_metrics_and_claims` | Extracts transcript topics, claims, and metrics | — | **PASSED** |
+| 18 | `tests/test_question_generator.py` | `test_llm_question_generator_with_rag_context` | Generates questions and retrieves FAISS coaching context | — | **PASSED** |
+| 19 | `tests/test_question_generator.py` | `test_generator_accepts_spoken_tokens_and_requested_count` | Accepts speech tokens and honors requested question count | — | **PASSED** |
+| 20 | `tests/test_question_generator.py` | `test_openai_compatible_provider_uses_async_client` | Verifies asynchronous OpenAI-compatible provider integration | — | **PASSED** |
+| 21 | `tests/test_question_generator.py` | `test_rest_generate_questions_endpoint` | Checks question generation endpoint, defaults, and validation | — | **PASSED** |
+| 22 | `tests/test_question_generator.py` | `test_websocket_request_live_probes` | Verifies recent speech drives the live-probe event | — | **PASSED** |
 
 ```text
-======================== 16 passed, 1 warning in 2.74s ========================
+======================== 22 passed, 1 warning in 3.66s ========================
 ```
 
 ---
@@ -345,6 +379,7 @@ python -m pytest tests -v
 | `POST` | `/api/v1/sessions/start` | Initialize coaching session | `201 Created` (`session_id`, `websocket_url`) |
 | `POST` | `/api/v1/sessions/{id}/stop` | Stop streaming & run PyTorch + RAG analytics | `200 OK` (`duration_seconds`, `report_url`) |
 | `GET` | `/api/v1/sessions/{id}/report` | Retrieve structured evaluation JSON | `200 OK` (`PostSessionReport`) |
+| `POST` | `/api/v1/sessions/{id}/generate-questions` | Generate transcript-aware audience questions (`question_count`, `difficulty`, optional `focus_area`) | `200 OK` (`QuestionGenerationResult`) |
 | `GET` | `/api/v1/sessions/{id}/status` | Live session telemetry & FPS | `200 OK` (`pipeline_fps`, `uptime_seconds`) |
 | `GET` | `/api/v1/health` | System health & component readiness | `200 OK` (`status: "HEALTHY"`) |
 | `GET` | `/` | Serves the web dashboard UI | `200 OK` (HTML) |
@@ -359,6 +394,26 @@ python -m pytest tests -v
   "data": "/9j/4AAQSkZJRgABAQEASABIAAD... [Base64 JPEG Frame]"
 }
 ```
+
+#### Inbound Live-Probe Request and Outbound Probe Event
+Request an immediate probe based on the session's last 30 seconds of speech:
+```json
+{ "type": "request_live_probes" }
+```
+
+The server responds with:
+```json
+{
+  "event": "live_probe_question",
+  "probe": {
+    "prompt_text": "You just cited '35%'. What baseline supports that figure?",
+    "trigger_phrase": "35%",
+    "context": "Quantitative Verification Drill"
+  }
+}
+```
+
+The question-generation REST response includes `session_id`, `transcript_summary`, `targeted_questions` (question, category, rationale, and answer focus), `live_probes`, and `rag_context_used`.
 
 #### Outbound Telemetry Event (Server $\to$ Client)
 ```json
@@ -404,6 +459,7 @@ presentation_ai/
 │   ├── chunker.py                     # 256-token chunker with 32-token overlap
 │   ├── indexer.py                     # FAISS HNSW M=16 indexer & BGE-large-en embeddings
 │   ├── retriever.py                   # CoachingRetriever for diagnostic defects
+│   ├── question_generator.py          # Transcript-aware Q&A and live-probe generation
 │   ├── corpus_generator.py            # 1,000 transcript corpus generator with queries
 │   └── evaluation.py                  # Evaluation harness (Hit Rate@3 >= 0.82)
 ├── analytics/
@@ -434,7 +490,8 @@ presentation_ai/
     ├── test_video_pipeline.py         # Video pipeline tests (4/4 passing)
     ├── test_rag_engine.py             # RAG engine tests (4/4 passing)
     ├── test_analytics.py              # Analytics engine tests (4/4 passing)
-    └── test_api.py                    # REST & WebSocket integration tests (4/4 passing)
+    ├── test_api.py                    # REST & WebSocket integration tests (4/4 passing)
+    └── test_question_generator.py     # Transcript, RAG, provider, REST & WS Q&A tests
 ```
 
 ---
@@ -449,7 +506,7 @@ pip install -r requirements.txt
 ```
 
 ### 2. Execute Automated Tests
-Run the complete 16-test suite:
+Run the complete 22-test suite:
 ```bash
 python -m pytest tests -v
 ```
@@ -468,3 +525,6 @@ http://localhost:8000
 1. Click **"Start Session"** to begin real-time posture tracking and speech coaching.
 2. Watch live HUD feedback: shoulder alignment line, spine vector, latency SLA gauge, and WPM meter.
 3. Click **"End & Analyze"** to inspect your 5-axis Radar chart and RAG coaching advice.
+4. In the report, click **"Generate Audience Questions"** to practice answering transcript-aware evaluator questions. During a live session, click **"Ask me a live question"** for an immediate probe.
+
+To enable an external LLM provider, set `GEMINI_API_KEY` or `OPENAI_API_KEY` before starting the server. Provider selection and optional model/base URL settings are documented in [Module 5](#module-5-interactive-qa-and-live-probes). Without a key, the offline generator remains available.
