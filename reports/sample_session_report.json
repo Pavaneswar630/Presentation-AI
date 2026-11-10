@@ -1,0 +1,54 @@
+{
+  "session_id": "sess_883f9b20-1a42-4b71-b0e2-8874fa19e03d",
+  "status": "COMPLETED",
+  "summary": {
+    "overall_score": 84.5,
+    "duration_seconds": 180.25,
+    "total_words_spoken": 442,
+    "average_cadence_wpm": 147.1,
+    "filler_word_count": 8,
+    "filler_word_ratio_pct": 1.81,
+    "posture_stability_score": 88.2
+  },
+  "radar_dimensions": {
+    "posture": 88.2,
+    "pacing": 92.0,
+    "gesture_expressiveness": 79.5,
+    "verbal_clarity": 84.0,
+    "energy_consistency": 81.3
+  },
+  "time_series_metrics": {
+    "timestamps": [0.0, 15.0, 30.0, 45.0, 60.0, 75.0, 90.0],
+    "wpm_rolling": [140.0, 155.0, 162.0, 144.0, 142.0, 150.0, 147.0],
+    "posture_stability_rolling": [92.0, 89.5, 76.0, 88.0, 91.0, 90.5, 93.0],
+    "hand_fidget_energy": [0.012, 0.015, 0.045, 0.018, 0.011, 0.014, 0.010]
+  },
+  "detected_defects": [
+    {
+      "defect_type": "SLUMPED_POSTURE",
+      "timestamp_range": [30.0, 45.0],
+      "severity": "MODERATE",
+      "metric_value": "Spine tilt deviation exceeded 14.2 degrees"
+    },
+    {
+      "defect_type": "FILLER_WORD_CLUSTER",
+      "timestamp_range": [75.0, 88.0],
+      "severity": "LOW",
+      "metric_value": "4 occurrences of 'like' and 'um' within 13 seconds"
+    }
+  ],
+  "rag_coaching_recommendations": [
+    {
+      "source_transcript_id": "transcript_chunk_412",
+      "similarity_score": 0.894,
+      "topic": "Upper Torso Alignment & Confidence Projection",
+      "recommendation": "When moving between slides, anchor your feet shoulder-width apart and roll your shoulders back. Expanding your thoracic cage directly improves diaphragm breath support."
+    },
+    {
+      "source_transcript_id": "transcript_chunk_108",
+      "similarity_score": 0.867,
+      "topic": "Cadence Modulation & Deliberate Pausing",
+      "recommendation": "Replace verbal fillers with a silent two-second pause before transitioning to financial data points. This creates gravitas and lets your audience process key numbers."
+    }
+  ]
+}

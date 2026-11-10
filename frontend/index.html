@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Presentation AI — Real-Time Speech & Body Language Coach</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Google Fonts & Custom Styles -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col font-sans antialiased">
+
+  <!-- Top Navigation Header -->
+  <header class="border-b border-gray-800 bg-gray-900/80 backdrop-blur-md sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between">
+    <div class="flex items-center space-x-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+        </svg>
+      </div>
+      <div>
+        <h1 class="font-bold text-lg leading-tight tracking-tight text-white flex items-center gap-2">
+          Presentation AI <span class="text-xs px-2 py-0.5 rounded-full bg-blue-900/60 text-blue-300 border border-blue-700/50">v1.0 Real-Time</span>
+        </h1>
+        <p class="text-xs text-gray-400">OpenCV + MediaPipe Pose • FAISS HNSW RAG • PyTorch Analytics</p>
+      </div>
+    </div>
+
+    <!-- Live Telemetry Badges in Header -->
+    <div class="hidden md:flex items-center space-x-4">
+      <div class="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-gray-800/80 border border-gray-700/60 text-xs font-mono">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 sla-indicator-good" id="headerSlaDot"></span>
+        <span class="text-gray-400">LATENCY:</span>
+        <span class="text-emerald-400 font-semibold" id="headerLatencyVal">0.0 ms</span>
+        <span class="text-gray-500 text-[10px]">(SLA &lt;22ms)</span>
+      </div>
+
+      <div class="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-gray-800/80 border border-gray-700/60 text-xs font-mono">
+        <span class="text-gray-400">FPS:</span>
+        <span class="text-blue-400 font-semibold" id="headerFpsVal">0.0</span>
+        <span class="text-gray-500 text-[10px]">/ 30.0</span>
+      </div>
+
+      <div class="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-gray-800/80 border border-gray-700/60 text-xs font-mono">
+        <span class="text-gray-400">SESSION:</span>
+        <span class="text-purple-400 font-semibold" id="headerTimer">00:00</span>
+      </div>
+    </div>
+
+    <!-- View Mode Switch -->
+    <div class="flex items-center bg-gray-800/90 p-1 rounded-xl border border-gray-700/80 text-xs">
+      <button id="tabLiveBtn" class="px-3.5 py-1.5 rounded-lg font-medium transition-all bg-blue-600 text-white shadow">
+        Live HUD
+      </button>
+      <button id="tabReportBtn" class="px-3.5 py-1.5 rounded-lg font-medium transition-all text-gray-400 hover:text-white">
+        Evaluation Report
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
+
+    <!-- TAB 1: LIVE COACHING HUD VIEW -->
+    <section id="viewLive" class="space-y-6">
+      <!-- Session Controls Bar -->
+      <div class="flex flex-wrap items-center justify-between gap-4 p-4 rounded-2xl glass-panel">
+        <div class="flex items-center space-x-3">
+          <button id="btnStart" class="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 transition-all text-white font-semibold text-sm shadow-lg shadow-emerald-600/30">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path>
+            </svg>
+            <span>Start Session</span>
+          </button>
+
+          <button id="btnStop" disabled class="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 transition-all text-white font-semibold text-sm shadow-lg shadow-rose-600/30 opacity-50 cursor-not-allowed">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd"></path>
+            </svg>
+            <span>End & Analyze</span>
+          </button>
+        </div>
+
+        <!-- Input Source Selector & Sim Switch -->
+        <div class="flex items-center space-x-4 text-xs">
+          <label class="flex items-center space-x-2 cursor-pointer text-gray-300">
+            <input type="checkbox" id="chkSimulated" class="rounded bg-gray-800 border-gray-700 text-blue-600 focus:ring-0">
+            <span>Demo Synthetic Feed</span>
+          </label>
+
+          <label class="flex items-center space-x-2 cursor-pointer text-gray-300">
+            <input type="checkbox" id="chkAudioStt" checked class="rounded bg-gray-800 border-gray-700 text-blue-600 focus:ring-0">
+            <span>Speech Recognition (STT)</span>
+          </label>
+
+          <span class="text-gray-500">|</span>
+          <span class="text-gray-400 font-mono text-[11px]" id="statusPill">Status: Idle</span>
+        </div>
+      </div>
+
+      <!-- Live Video HUD & Real-time Metrics Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+
+        <!-- Left 2 Cols: Video Stream with Landmark Canvas Overlay -->
+        <div class="lg:col-span-2 space-y-4">
+          <div class="video-wrapper">
+            <!-- Alert Banner Toast (Hidden by default) -->
+            <div id="alertToast" class="hidden alert-banner absolute top-4 left-4 right-4 z-30 p-3.5 rounded-xl bg-amber-950/90 border border-amber-500/50 backdrop-blur-md flex items-center space-x-3 text-amber-200 text-sm shadow-xl">
+              <svg class="w-5 h-5 flex-shrink-0 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+              </svg>
+              <div class="flex-1">
+                <p class="font-bold text-xs uppercase tracking-wider text-amber-300" id="alertCode">POSTURE ALERT</p>
+                <p class="text-xs" id="alertMessage">Spine deviation exceeded threshold.</p>
+              </div>
+            </div>
+
+            <!-- Video Player & Drawing Canvas -->
+            <video id="webcamVideo" class="video-element" autoplay playsinline muted></video>
+            <canvas id="overlayCanvas" class="canvas-overlay"></canvas>
+
+            <!-- Bottom Video Overlay HUD -->
+            <div class="absolute bottom-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+              <div class="hud-badge px-3 py-1.5 rounded-lg text-xs font-mono flex items-center space-x-2">
+                <span class="text-gray-400">SHOULDER TILT:</span>
+                <span class="font-bold text-blue-400" id="hudShoulderTilt">0.0°</span>
+              </div>
+              <div class="hud-badge px-3 py-1.5 rounded-lg text-xs font-mono flex items-center space-x-2">
+                <span class="text-gray-400">SPINE PLUMB:</span>
+                <span class="font-bold text-purple-400" id="hudSpineDev">0.0°</span>
+              </div>
+              <div class="hud-badge px-3 py-1.5 rounded-lg text-xs font-mono flex items-center space-x-2">
+                <span class="text-gray-400">HAND JITTER:</span>
+                <span class="font-bold text-emerald-400" id="hudHandJitter">0.000</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right 1 Col: Live Real-Time Coaching Gauges -->
+        <div class="space-y-4">
+          <!-- Overall Real-time Posture Stability Gauge -->
+          <div class="glass-panel p-5 rounded-2xl">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3 flex items-center justify-between">
+              <span>Posture Stability Index</span>
+              <span class="text-blue-400 font-mono text-sm" id="hudStabilityVal">100.0</span>
+            </h3>
+            <div class="w-full bg-gray-800 rounded-full h-3 overflow-hidden">
+              <div id="barStability" class="bg-gradient-to-r from-blue-500 to-emerald-400 h-3 rounded-full transition-all duration-300" style="width: 100%;"></div>
+            </div>
+            <p class="text-[11px] text-gray-400 mt-2">Target &gt;85 for optimal executive confidence.</p>
+          </div>
+
+          <!-- Real-Time Speech Cadence (WPM) -->
+          <div class="glass-panel p-5 rounded-2xl">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2 flex items-center justify-between">
+              <span>Speaking Cadence</span>
+              <span class="text-emerald-400 font-mono text-sm" id="hudWpmVal">0 WPM</span>
+            </h3>
+            <div class="w-full bg-gray-800 rounded-full h-3 overflow-hidden relative">
+              <!-- Target optimal zone indicator 130-160 WPM (mapped to 0-200 scale) -->
+              <div class="absolute left-[65%] w-[15%] h-full bg-emerald-500/20 border-x border-emerald-400/40"></div>
+              <div id="barWpm" class="bg-emerald-500 h-3 rounded-full transition-all duration-300" style="width: 0%;"></div>
+            </div>
+            <div class="flex justify-between text-[10px] text-gray-500 mt-1 font-mono">
+              <span>Slow (100)</span>
+              <span class="text-emerald-400 font-semibold">Optimal (130-160)</span>
+              <span>Fast (200+)</span>
+            </div>
+          </div>
+
+          <!-- Filler Words Tracker -->
+          <div class="glass-panel p-5 rounded-2xl">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Verbal Fillers Detected</h3>
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-3xl font-extrabold text-white font-mono" id="hudFillerCount">0</p>
+                <p class="text-[11px] text-gray-400">Total disfluencies ("um", "uh", "like")</p>
+              </div>
+              <div class="text-right">
+                <span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-400 border border-emerald-700/50" id="hudFillerRatio">
+                  0.0% ratio
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Real-time Speech Transcript Snippet -->
+          <div class="glass-panel p-4 rounded-2xl space-y-2">
+            <p class="text-xs font-bold uppercase tracking-wider text-gray-400">Live Speech Stream</p>
+            <div id="transcriptBox" class="h-20 overflow-y-auto text-xs text-gray-300 font-mono bg-gray-950/60 p-2.5 rounded-lg border border-gray-800/80">
+              <span class="text-gray-500 italic">Listening for speech...</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+
+    <!-- TAB 2: POST-SESSION DIAGNOSTIC REPORT VIEW -->
+    <section id="viewReport" class="hidden space-y-8">
+      <!-- Report Header -->
+      <div class="flex flex-wrap items-center justify-between gap-4 border-b border-gray-800 pb-5">
+        <div>
+          <h2 class="text-2xl font-bold text-white flex items-center gap-3">
+            Presentation Evaluation Report
+            <span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-900/40 text-blue-300 border border-blue-700/50" id="repSessionId">sess_...</span>
+          </h2>
+          <p class="text-xs text-gray-400 mt-1">Multi-modal synthesis generated via PyTorch analytics and FAISS HNSW coaching engine.</p>
+        </div>
+
+        <button id="btnReturnLive" class="px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-medium border border-gray-700 transition-all flex items-center space-x-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+          </svg>
+          <span>Back to Live HUD</span>
+        </button>
+      </div>
+
+      <!-- Executive Scorecards Grid -->
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <!-- Card 1: Overall Score -->
+        <div class="glass-panel p-4 rounded-2xl border-l-4 border-blue-500">
+          <p class="text-[11px] font-bold text-gray-400 uppercase">Overall Score</p>
+          <p class="text-2xl font-extrabold text-blue-400 mt-1 font-mono" id="repOverallScore">--</p>
+          <span class="text-[10px] text-gray-500">/ 100 benchmark</span>
+        </div>
+
+        <!-- Card 2: Posture Score -->
+        <div class="glass-panel p-4 rounded-2xl border-l-4 border-purple-500">
+          <p class="text-[11px] font-bold text-gray-400 uppercase">Posture Stability</p>
+          <p class="text-2xl font-extrabold text-purple-400 mt-1 font-mono" id="repPostureScore">--</p>
+          <span class="text-[10px] text-gray-500">Torso alignment</span>
+        </div>
+
+        <!-- Card 3: Avg Cadence -->
+        <div class="glass-panel p-4 rounded-2xl border-l-4 border-emerald-500">
+          <p class="text-[11px] font-bold text-gray-400 uppercase">Average Cadence</p>
+          <p class="text-2xl font-extrabold text-emerald-400 mt-1 font-mono" id="repCadenceWpm">--</p>
+          <span class="text-[10px] text-gray-500">WPM (130-160 opt)</span>
+        </div>
+
+        <!-- Card 4: Filler Count -->
+        <div class="glass-panel p-4 rounded-2xl border-l-4 border-amber-500">
+          <p class="text-[11px] font-bold text-gray-400 uppercase">Filler Words</p>
+          <p class="text-2xl font-extrabold text-amber-400 mt-1 font-mono" id="repFillerCount">--</p>
+          <span class="text-[10px] text-gray-500" id="repFillerRatio">--% of speech</span>
+        </div>
+
+        <!-- Card 5: Words Spoken -->
+        <div class="glass-panel p-4 rounded-2xl border-l-4 border-indigo-500">
+          <p class="text-[11px] font-bold text-gray-400 uppercase">Words Spoken</p>
+          <p class="text-2xl font-extrabold text-indigo-400 mt-1 font-mono" id="repWordsSpoken">--</p>
+          <span class="text-[10px] text-gray-500">Total vocabulary</span>
+        </div>
+
+        <!-- Card 6: Duration -->
+        <div class="glass-panel p-4 rounded-2xl border-l-4 border-gray-600">
+          <p class="text-[11px] font-bold text-gray-400 uppercase">Duration</p>
+          <p class="text-2xl font-extrabold text-gray-200 mt-1 font-mono" id="repDuration">--</p>
+          <span class="text-[10px] text-gray-500">Minutes : Seconds</span>
+        </div>
+      </div>
+
+      <!-- Charts Row: Radar Chart & Time Series -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- 5-Axis Radar Chart -->
+        <div class="glass-panel p-6 rounded-2xl flex flex-col items-center">
+          <h3 class="text-sm font-bold text-white mb-4 uppercase tracking-wider self-start">5-Axis Skill Breakdown</h3>
+          <div class="relative w-full max-w-[320px] aspect-square">
+            <canvas id="radarChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Time-Series Line Charts -->
+        <div class="lg:col-span-2 glass-panel p-6 rounded-2xl space-y-4">
+          <h3 class="text-sm font-bold text-white uppercase tracking-wider">Temporal Dynamics (Stability & Pacing)</h3>
+          <div class="relative w-full h-64">
+            <canvas id="timeSeriesChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Detected Defects & RAG Coaching Advice Row -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Defects Timeline -->
+        <div class="glass-panel p-6 rounded-2xl space-y-4">
+          <h3 class="text-sm font-bold text-white uppercase tracking-wider flex items-center justify-between">
+            <span>Detected Delivery Defects</span>
+            <span class="text-xs font-mono text-gray-400" id="repDefectCount">0 detected</span>
+          </h3>
+          <div id="defectsList" class="space-y-3">
+            <p class="text-xs text-gray-500 italic">No defects detected during session.</p>
+          </div>
+        </div>
+
+        <!-- RAG Coaching Recommendations -->
+        <div class="glass-panel p-6 rounded-2xl space-y-4">
+          <h3 class="text-sm font-bold text-white uppercase tracking-wider flex items-center justify-between">
+            <span>RAG Coaching Guidance</span>
+            <span class="text-xs px-2 py-0.5 rounded bg-blue-900/50 text-blue-300 font-mono text-[10px]">FAISS HNSW (M=16)</span>
+          </h3>
+          <div id="coachingList" class="space-y-3">
+            <p class="text-xs text-gray-500 italic">Complete a presentation session to generate advice.</p>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Client JavaScript -->
+  <script src="/static/app.js"></script>
+</body>
+</html>
