@@ -23,6 +23,13 @@
   const el = {
     btnStart: document.getElementById('btnStart'),
     btnStop: document.getElementById('btnStop'),
+    btnRequestProbe: document.getElementById('btnRequestProbe'),
+    btnGenerateQuestions: document.getElementById('btnGenerateQuestions'),
+    liveProbePanel: document.getElementById('liveProbePanel'),
+    liveProbeContext: document.getElementById('liveProbeContext'),
+    liveProbeText: document.getElementById('liveProbeText'),
+    qaStatus: document.getElementById('qaStatus'),
+    qaQuestions: document.getElementById('qaQuestions'),
     tabLiveBtn: document.getElementById('tabLiveBtn'),
     tabReportBtn: document.getElementById('tabReportBtn'),
     btnReturnLive: document.getElementById('btnReturnLive'),
@@ -73,6 +80,8 @@
   // Event Listeners
   el.btnStart.addEventListener('click', startSession);
   el.btnStop.addEventListener('click', stopSession);
+  el.btnRequestProbe.addEventListener('click', requestLiveProbe);
+  el.btnGenerateQuestions.addEventListener('click', generateAudienceQuestions);
   el.tabLiveBtn.addEventListener('click', () => switchTab('live'));
   el.tabReportBtn.addEventListener('click', () => switchTab('report'));
   el.btnReturnLive.addEventListener('click', () => switchTab('live'));
@@ -270,6 +279,8 @@
           handleLiveMetrics(msg);
         } else if (msg.event === 'coaching_alert') {
           handleCoachingAlert(msg);
+        } else if (msg.event === 'live_probe_question') {
+          handleLiveProbe(msg.probe);
         }
       } catch (e) {
         console.warn('Malformed WS message:', e);
@@ -279,6 +290,26 @@
     state.ws.onerror = (err) => {
       console.error('WebSocket Error:', err);
     };
+  }
+
+  function requestLiveProbe() {
+    if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
+      showLiveProbe('Live questions are available after the session connects.', 'Connection required');
+      return;
+    }
+
+    state.ws.send(JSON.stringify({ type: 'request_live_probes' }));
+  }
+
+  function handleLiveProbe(probe) {
+    if (!probe) return;
+    showLiveProbe(probe.prompt_text || 'Can you support that point with a concrete example?', probe.context || 'Live audience probe');
+  }
+
+  function showLiveProbe(prompt, context) {
+    el.liveProbeContext.textContent = context;
+    el.liveProbeText.textContent = prompt;
+    el.liveProbePanel.classList.remove('hidden');
   }
 
   /**
@@ -516,6 +547,81 @@
 
     // Render RAG Coaching Recommendations
     renderCoachingAdvice(report.rag_coaching_recommendations || []);
+
+    el.qaStatus.classList.add('hidden');
+    el.qaStatus.textContent = '';
+    el.qaQuestions.replaceChildren();
+    const qaPrompt = document.createElement('p');
+    qaPrompt.className = 'text-xs text-gray-500 italic';
+    qaPrompt.textContent = 'Generate questions based on the transcript from this session.';
+    el.qaQuestions.appendChild(qaPrompt);
+  }
+
+  async function generateAudienceQuestions() {
+    if (!state.sessionId) {
+      el.qaStatus.textContent = 'Complete a session before generating audience questions.';
+      el.qaStatus.classList.remove('hidden');
+      return;
+    }
+
+    el.btnGenerateQuestions.disabled = true;
+    el.qaStatus.textContent = 'Analyzing your transcript and coaching context...';
+    el.qaStatus.classList.remove('hidden');
+    try {
+      const response = await fetch(`/api/v1/sessions/${encodeURIComponent(state.sessionId)}/generate-questions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question_count: 3, difficulty: 'probing' })
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.detail || `Server returned status ${response.status}`);
+      }
+
+      renderGeneratedQuestions(payload);
+      el.qaStatus.textContent = payload.transcript_summary || 'Questions generated from your presentation.';
+    } catch (err) {
+      console.error('Question generation error:', err);
+      el.qaStatus.textContent = `Could not generate questions: ${err.message}`;
+    } finally {
+      el.qaStatus.classList.remove('hidden');
+      el.btnGenerateQuestions.disabled = false;
+    }
+  }
+
+  function renderGeneratedQuestions(result) {
+    const fragment = document.createDocumentFragment();
+    for (const question of result.targeted_questions || []) {
+      const card = document.createElement('article');
+      card.className = 'p-4 rounded-xl bg-gray-900/60 border border-gray-800 space-y-2';
+
+      const badge = document.createElement('span');
+      badge.className = 'inline-flex px-2 py-1 rounded-full text-[10px] font-semibold bg-blue-950 text-blue-300 border border-blue-800';
+      badge.textContent = question.category || 'Audience question';
+
+      const prompt = document.createElement('p');
+      prompt.className = 'text-sm font-semibold text-white';
+      prompt.textContent = question.question_text || '';
+
+      const rationale = document.createElement('p');
+      rationale.className = 'text-xs text-gray-300';
+      rationale.textContent = `Why they ask: ${question.rationale || 'Tests the depth of your presentation.'}`;
+
+      const answerFocus = document.createElement('p');
+      answerFocus.className = 'text-xs text-emerald-300';
+      answerFocus.textContent = `Answer strategy: ${question.suggested_answer_focus || 'Support your response with clear evidence.'}`;
+
+      card.append(badge, prompt, rationale, answerFocus);
+      fragment.appendChild(card);
+    }
+
+    if (!fragment.childNodes.length) {
+      const emptyState = document.createElement('p');
+      emptyState.className = 'text-xs text-amber-300';
+      emptyState.textContent = 'The question generator returned no questions. Please try again.';
+      fragment.appendChild(emptyState);
+    }
+    el.qaQuestions.replaceChildren(fragment);
   }
 
   function renderRadarChart(radar) {

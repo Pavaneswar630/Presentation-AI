@@ -3,6 +3,13 @@ from .indexer import FAISSHNSWIndexer, BGEEmbedder, FallbackHNSWIndex
 from .retriever import CoachingAdvice, CoachingRetriever
 from .corpus_generator import TranscriptCorpusGenerator
 from .evaluation import RAGEvaluationHarness, run_full_1000_transcript_benchmark
+from .question_generator import (
+    PresentationQuestion,
+    LiveProbePrompt,
+    QuestionGenerationResult,
+    TranscriptSegmentAnalyzer,
+    LLMQuestionGenerator
+)
 
 __all__ = [
     "TranscriptChunk",
@@ -15,5 +22,10 @@ __all__ = [
     "CoachingRetriever",
     "TranscriptCorpusGenerator",
     "RAGEvaluationHarness",
-    "run_full_1000_transcript_benchmark"
+    "run_full_1000_transcript_benchmark",
+    "PresentationQuestion",
+    "LiveProbePrompt",
+    "QuestionGenerationResult",
+    "TranscriptSegmentAnalyzer",
+    "LLMQuestionGenerator"
 ]

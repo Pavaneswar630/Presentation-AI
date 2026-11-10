@@ -1,7 +1,7 @@
 """FastAPI REST routes for session lifecycles, report retrieval, and health checks."""
 
 import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Literal
 from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel, Field
 
@@ -165,3 +165,31 @@ async def health_check(manager: SessionManager = Depends(get_session_manager)):
             "analytics_engine": {"status": "READY"}
         }
     }
+
+
+class GenerateQuestionsRequest(BaseModel):
+    question_count: int = Field(default=3, ge=1, le=10)
+    difficulty: Literal["foundational", "probing", "challenging"] = "probing"
+    focus_area: Optional[str] = Field(default=None, description="Specific topic to drill questions on")
+
+
+@router.post("/sessions/{session_id}/generate-questions")
+async def generate_questions_route(
+    session_id: str,
+    req: Optional[GenerateQuestionsRequest] = None,
+    manager: SessionManager = Depends(get_session_manager)
+):
+    """Analyzes session transcript and returns dynamic Q&A practice questions."""
+    req = req or GenerateQuestionsRequest()
+    result = await manager.generate_questions_for_session(
+        session_id=session_id,
+        question_count=req.question_count,
+        difficulty=req.difficulty,
+        focus_area=req.focus_area
+    )
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {session_id} not found."
+        )
+    return result.to_dict()

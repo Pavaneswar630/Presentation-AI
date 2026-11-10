@@ -13,6 +13,11 @@ from analytics.models import TelemetryPoint, PostSessionReport
 from analytics.speech_analytics import SpokenWordToken
 from analytics.session_aggregator import SessionDataAggregator
 from rag_engine.retriever import CoachingRetriever
+from rag_engine.question_generator import (
+    LLMQuestionGenerator,
+    QuestionGenerationResult,
+    LiveProbePrompt
+)
 
 logger = logging.getLogger("presentation_ai.api.session_manager")
 
@@ -40,6 +45,8 @@ class SessionManager:
     def __init__(self, retriever: Optional[CoachingRetriever] = None):
         self.retriever = retriever
         self.aggregator = SessionDataAggregator(retriever=retriever)
+        indexer = retriever.indexer if retriever else None
+        self.question_generator = LLMQuestionGenerator(indexer=indexer, retriever=retriever)
         self._sessions: Dict[str, SessionState] = {}
         self._global_lock = threading.Lock()
 
@@ -48,10 +55,11 @@ class SessionManager:
         user_id: str = "anonymous",
         presentation_title: str = "Untitled Keynote",
         target_fps: float = 30.0,
-        max_latency_sla_ms: float = 22.0
+        max_latency_sla_ms: float = 22.0,
+        session_id: Optional[str] = None
     ) -> SessionState:
         """Initializes a new session and launches an external-source video pipeline."""
-        session_id = f"sess_{uuid.uuid4()}"
+        session_id = session_id or f"sess_{uuid.uuid4()}"
         pipeline = DualThreadedPosePipeline(
             video_source="EXTERNAL",
             max_latency_sla_ms=max_latency_sla_ms,
@@ -84,6 +92,9 @@ class SessionManager:
         pipeline.start()
 
         with self._global_lock:
+            if session_id in self._sessions:
+                pipeline.stop()
+                raise ValueError(f"Session {session_id} already exists.")
             self._sessions[session_id] = state
 
         logger.info(f"Initialized coaching session {session_id} for user {user_id}")
@@ -134,3 +145,49 @@ class SessionManager:
         with state.lock:
             state.spoken_tokens.extend(tokens)
         return True
+
+    async def generate_questions_for_session(
+        self,
+        session_id: str,
+        question_count: int = 3,
+        difficulty: str = "probing",
+        focus_area: Optional[str] = None
+    ) -> Optional[QuestionGenerationResult]:
+        """Analyzes session transcript and generates targeted audience questions via RAG + LLM."""
+        state = self.get_session(session_id)
+        if not state:
+            return None
+
+        with state.lock:
+            if state.spoken_tokens:
+                transcript_text = " ".join([t.word for t in state.spoken_tokens])
+            else:
+                transcript_text = f"Keynote presentation on {state.title}."
+
+        result = await self.question_generator.generate_questions(
+            session_id=session_id,
+            transcript_text=transcript_text,
+            question_count=question_count,
+            difficulty=difficulty,
+            focus_area=focus_area
+        )
+        return result
+
+    def generate_live_probe_for_session(self, session_id: str) -> Optional[LiveProbePrompt]:
+        """Generates an instantaneous live practice probe based on recent speech."""
+        state = self.get_session(session_id)
+        if not state:
+            return None
+
+        with state.lock:
+            cutoff = max(0.0, time.perf_counter() - state.start_time - 30.0)
+            recent_tokens = [
+                token for token in state.spoken_tokens
+                if token.end_time >= cutoff
+            ]
+            if recent_tokens:
+                recent_text = " ".join([t.word for t in recent_tokens])
+            else:
+                recent_text = f"Presentation topic: {state.title}."
+
+        return self.question_generator.generate_live_probe(recent_text)

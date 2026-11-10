@@ -3,8 +3,8 @@
 ## 1. Overview & Transport Protocol
 
 The **Presentation AI** backend exposes dual communication interfaces:
-1. **REST API (HTTP/1.1 & HTTP/2):** Handles session lifecycles, configuration provisioning, health checks, and post-session report retrieval.
-2. **WebSocket Interface (`/ws/v1/session/{session_id}`):** Provides ultra-low-latency, full-duplex streaming for real-time video frames, audio chunks, pose telemetry, and coaching alerts.
+1. **REST API (HTTP/1.1 & HTTP/2):** Handles session lifecycles, configuration provisioning, health checks, post-session reports, and interactive audience-question generation.
+2. **WebSocket Interface (`/ws/v1/session/{session_id}`):** Provides full-duplex streaming for real-time video frames, speech tokens, pose telemetry, coaching alerts, and live probing questions.
 
 * **Base URL:** `http://localhost:8000`
 * **WebSocket URL:** `ws://localhost:8000/ws/v1/session/{session_id}`
@@ -204,6 +204,65 @@ X-Client-Version: 1.0.0
 
 ---
 
+### 3.5. Generate Interactive Audience Questions
+* **Endpoint:** `POST /api/v1/sessions/{session_id}/generate-questions`
+* **Description:** Analyzes the session transcript, retrieves matching FAISS HNSW coaching context, and returns evaluator questions with answer guidance. Uses Gemini or an OpenAI-compatible provider when configured; otherwise it runs the offline heuristic generator.
+* **Provider configuration:** Set `GEMINI_API_KEY` or `OPENAI_API_KEY`; optional `PRES_AI_LLM_PROVIDER`, `PRES_AI_LLM_MODEL`, and `PRES_AI_LLM_BASE_URL` settings select the provider, model, and OpenAI-compatible endpoint.
+
+#### Request Payload
+All fields are optional.
+```json
+{
+  "question_count": 3,
+  "difficulty": "probing",
+  "focus_area": "scaling the customer onboarding process"
+}
+```
+* `question_count`: 1–10 (default `3`)
+* `difficulty`: `foundational`, `probing`, or `challenging` (default `probing`)
+* `focus_area`: optional subject to emphasize
+
+#### Response Payload (`200 OK`)
+```json
+{
+  "session_id": "sess_883f9b20-1a42-4b71-b0e2-8874fa19e03d",
+  "transcript_summary": "Presentation covering onboarding, customer, and scaling. Analyzed 42 words with 2 key claims.",
+  "targeted_questions": [
+    {
+      "question_text": "How did you benchmark the claimed improvement, and how will it scale?",
+      "category": "Feasibility",
+      "rationale": "Evaluators want to know whether the metric is defensible.",
+      "suggested_answer_focus": "Explain the baseline, measurement method, and scaling constraints.",
+      "difficulty": "probing"
+    },
+    {
+      "question_text": "What assumptions must hold for the proposal to succeed?",
+      "category": "Critical Thinking",
+      "rationale": "Evaluators probe the risks underlying the central claim.",
+      "suggested_answer_focus": "Name the key dependency and explain a mitigation plan.",
+      "difficulty": "probing"
+    },
+    {
+      "question_text": "Which business outcome should improve first?",
+      "category": "Business Impact",
+      "rationale": "Stakeholders need to understand how the proposal creates value.",
+      "suggested_answer_focus": "Connect the result to a baseline and a measurable timeframe.",
+      "difficulty": "probing"
+    }
+  ],
+  "live_probes": [
+    {
+      "prompt_text": "What baseline supports that figure?",
+      "trigger_phrase": "35%",
+      "context": "Quantitative Verification Drill"
+    }
+  ],
+  "rag_context_used": []
+}
+```
+
+---
+
 ## 4. WebSocket Streaming Protocol (`/ws/v1/session/{session_id}`)
 
 ### 4.1. Handshake & Initialization
@@ -253,23 +312,30 @@ Client                                             Server
   * Bytes 8–15: `float64` Timestamp (epoch seconds)
   * Bytes 16+: Raw JPEG/PNG image binary payload.
 
-#### Message B: `audio_packet` (Audio PCM Chunk)
+#### Message B: `audio_packet` (Recognized Speech Word)
 ```json
 {
   "type": "audio_packet",
-  "seq_id": 284,
-  "timestamp": 1731213605.500,
-  "sample_rate": 16000,
-  "channels": 1,
-  "data": "5PDw8PDw8PDw8PDw8PD... [Base64 Encoded 16-bit PCM Linear]"
+  "word": "35%",
+  "start_time": 12.2,
+  "end_time": 12.5
 }
 ```
+`start_time` and `end_time` are session-relative seconds and may be omitted.
 
 #### Message C: `client_heartbeat`
 ```json
 {
   "type": "client_heartbeat",
   "timestamp": 1731213610.000
+}
+```
+
+#### Message D: `request_live_probes`
+Requests an immediate probe based on speech from the last 30 seconds.
+```json
+{
+  "type": "request_live_probes"
 }
 ```
 
@@ -339,6 +405,18 @@ Client                                             Server
   "code": "FRAME_DROP_EXCEEDED",
   "message": "Client delivery rate dropped below 20 FPS. Throttling inference quality.",
   "timestamp": 1731213612.000
+}
+```
+
+#### Message D: `live_probe_question`
+```json
+{
+  "event": "live_probe_question",
+  "probe": {
+    "prompt_text": "You just cited '35%'. What baseline supports that figure?",
+    "trigger_phrase": "35%",
+    "context": "Quantitative Verification Drill"
+  }
 }
 ```
 

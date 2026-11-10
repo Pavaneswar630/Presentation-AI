@@ -60,7 +60,11 @@ async def presentation_stream(websocket: WebSocket, session_id: str):
     state: SessionState = manager.get_session(session_id)
     if not state:
         # Create ad-hoc session if not pre-initialized
-        state = manager.create_session(user_id="stream_user", presentation_title=f"Live Session {session_id}")
+        state = manager.create_session(
+            user_id="stream_user",
+            presentation_title=f"Live Session {session_id}",
+            session_id=session_id
+        )
 
     # 1. Send Handshake ACK
     ack_payload = {
@@ -164,6 +168,14 @@ async def presentation_stream(websocket: WebSocket, session_id: str):
 
                     elif msg_type == "client_heartbeat":
                         await websocket.send_text(json.dumps({"event": "server_pong", "timestamp": time.time()}))
+
+                    elif msg_type == "request_live_probes":
+                        probe = manager.generate_live_probe_for_session(session_id)
+                        if probe:
+                            await websocket.send_text(json.dumps({
+                                "event": "live_probe_question",
+                                "probe": probe.to_dict()
+                            }))
 
                 except json.JSONDecodeError:
                     pass

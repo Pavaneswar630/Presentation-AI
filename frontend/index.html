@@ -196,9 +196,18 @@
 
           <!-- Real-time Speech Transcript Snippet -->
           <div class="glass-panel p-4 rounded-2xl space-y-2">
-            <p class="text-xs font-bold uppercase tracking-wider text-gray-400">Live Speech Stream</p>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <p class="text-xs font-bold uppercase tracking-wider text-gray-400">Live Speech Stream</p>
+              <button id="btnRequestProbe" type="button" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-colors">
+                Ask me a live question
+              </button>
+            </div>
             <div id="transcriptBox" class="h-20 overflow-y-auto text-xs text-gray-300 font-mono bg-gray-950/60 p-2.5 rounded-lg border border-gray-800/80">
               <span class="text-gray-500 italic">Listening for speech...</span>
+            </div>
+            <div id="liveProbePanel" class="hidden p-3 rounded-xl bg-indigo-950/50 border border-indigo-700/50 space-y-1" role="status" aria-live="polite">
+              <p class="text-[10px] font-bold uppercase tracking-wider text-indigo-300" id="liveProbeContext">Live audience probe</p>
+              <p class="text-sm text-white" id="liveProbeText"></p>
             </div>
           </div>
         </div>
@@ -313,6 +322,23 @@
           <div id="coachingList" class="space-y-3">
             <p class="text-xs text-gray-500 italic">Complete a presentation session to generate advice.</p>
           </div>
+        </div>
+      </div>
+
+      <!-- Interactive Audience Q&A Simulator -->
+      <div class="glass-panel p-6 rounded-2xl space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 class="text-sm font-bold text-white uppercase tracking-wider">Interactive Audience Q&amp;A Simulator</h3>
+            <p class="text-xs text-gray-400 mt-1">Practice defending your claims with transcript-aware evaluator questions.</p>
+          </div>
+          <button id="btnGenerateQuestions" type="button" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold transition-colors">
+            Generate Audience Questions
+          </button>
+        </div>
+        <p id="qaStatus" class="hidden text-xs text-gray-400" role="status" aria-live="polite"></p>
+        <div id="qaQuestions" class="space-y-3">
+          <p class="text-xs text-gray-500 italic">Generate questions after completing a session.</p>
         </div>
       </div>
 
